@@ -54,6 +54,7 @@ let pirateSpawnTimer = 0;
 let pirates = [];
 let fuelCanisters = [];
 let fuelSpawnTimer = 600;
+let highscores = loadHighscores();
 
 const keys = {
     ArrowLeft: false,
@@ -102,6 +103,15 @@ function spawnPirate() {
         y = Math.random() * canvas.height;
     }
     pirates.push({ x, y, speed: 2 });
+}
+
+function loadHighscores() {
+    const saved = localStorage.getItem("highscores");
+    return saved ? JSON.parse(saved) : [];
+}
+
+function saveHighscores() {
+    localStorage.setItem("highscores", JSON.stringify(highscores));
 }
 
 function update() {
@@ -226,6 +236,19 @@ function update() {
             pirateSpawnTimer = 600; // every 10s
         }
     }
+
+    // Check for game over (out of fuel and not carrying package)
+    if (ship.fuel <= 0 && !carryingPackage) {
+        gameState = "gameOver";
+        // Save score if it's a highscore
+        if (highscores.length < 5 || score > highscores[highscores.length - 1].score) {
+            const initials = prompt("Enter your initials (3 letters):").slice(0, 3).toUpperCase();
+            highscores.push({ initials, score });
+            highscores.sort((a, b) => b.score - a.score);
+            if (highscores.length > 5) highscores.pop();
+            saveHighscores();
+        }
+    }
 }
 
 function drawBackground() {
@@ -310,7 +333,7 @@ function drawFuelBar() {
     const barWidth = 200;
     const barHeight = 20;
     const x = 10;
-    const y = 10;
+    const y = 30; // Positioned to avoid cropping
     ctx.fillStyle = "gray";
     ctx.fillRect(x, y, barWidth, barHeight);
     const fuelFraction = ship.fuel / ship.maxFuel;
@@ -333,6 +356,21 @@ function drawTitleScreen() {
     ctx.fillText("Avoid obstacles and manage fuel!", 250, 460);
 }
 
+function drawGameOverScreen() {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "white";
+    ctx.font = "48px Arial";
+    ctx.fillText("Game Over", 300, 200);
+    ctx.font = "24px Arial";
+    ctx.fillText("Click to Restart", 320, 250);
+    ctx.font = "18px Arial";
+    ctx.fillText("Highscores:", 350, 350);
+    highscores.forEach((entry, index) => {
+        ctx.fillText(`${index + 1}. ${entry.initials} - ${entry.score}`, 350, 380 + index * 30);
+    });
+}
+
 function draw() {
     drawBackground();
     if (gameState === "title") {
@@ -349,9 +387,11 @@ function draw() {
             const timeLeft = Math.ceil(deliveryTimer / 60);
             ctx.fillStyle = "white";
             ctx.font = "20px Arial";
-            ctx.fillText(`Time Left: ${timeLeft}s`, 10, 40);
+            ctx.fillText(`Time Left: ${timeLeft}s`, 10, 60); // Moved to y = 60
         }
-        ctx.fillText(`Score: ${score}`, 10, 70);
+        ctx.fillText(`Score: ${score}`, 10, 90); // Moved to y = 90
+    } else if (gameState === "gameOver") {
+        drawGameOverScreen();
     }
 }
 
@@ -363,11 +403,23 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-// Start game on click
+// Start or restart game on click
 canvas.addEventListener("click", () => {
     if (gameState === "title") {
         gameState = "playing";
         setNewDelivery();
+    } else if (gameState === "gameOver") {
+        // Reset game variables
+        ship.x = canvas.width / 2;
+        ship.y = canvas.height / 2;
+        ship.fuel = 100;
+        carryingPackage = false;
+        score = 0;
+        pirates = [];
+        fuelCanisters = [];
+        fuelSpawnTimer = 600;
+        setNewDelivery();
+        gameState = "playing";
     }
 });
 
