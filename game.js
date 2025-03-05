@@ -1,49 +1,81 @@
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+// Three.js setup
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.getElementById("gameCanvas").appendChild(renderer.domElement);
 
-// Game states
-let gameState = "title"; // "title", "playing", "gameOver"
+// Game state
+let gameState = "title";
 
-// Background stars
+// Ship (3D cone)
+const shipGeometry = new THREE.ConeGeometry(5, 20, 32);
+const shipMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const ship = new THREE.Mesh(shipGeometry, shipMaterial);
+ship.position.set(0, 0, 0);
+ship.rotation.x = Math.PI / 2; // Point forward
+scene.add(ship);
+
+// Camera setup (third-person view)
+camera.position.set(0, 50, 100);
+camera.lookAt(ship.position);
+
+// Lighting
+const ambientLight = new THREE.AmbientLight(0x404040);
+scene.add(ambientLight);
+const pointLight = new THREE.PointLight(0xffffff, 1, 500);
+pointLight.position.set(50, 50, 50);
+scene.add(pointLight);
+
+// Stars (small cubes)
 const stars = [];
-for (let i = 0; i < 100; i++) {
-    stars.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height
-    });
+for (let i = 0; i < 200; i++) {
+    const star = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 1, 1),
+        new THREE.MeshBasicMaterial({ color: 0xffffff })
+    );
+    star.position.set(
+        (Math.random() - 0.5) * 1000,
+        (Math.random() - 0.5) * 1000,
+        (Math.random() - 0.5) * 1000
+    );
+    scene.add(star);
+    stars.push(star);
 }
 
-// Player's ship
-const ship = {
-    x: canvas.width / 2,
-    y: canvas.height / 2,
-    width: 20,
-    height: 30,
-    speed: 5,
-    fuel: 100,
-    maxFuel: 100
-};
-
-// Planets
+// Planets (spheres)
 const planets = [
-    { x: 100, y: 100, radius: 30, color: "blue" },
-    { x: 700, y: 500, radius: 30, color: "green" },
-    { x: 200, y: 500, radius: 30, color: "orange" },
-    { x: 600, y: 100, radius: 30, color: "purple" }
+    { mesh: new THREE.Mesh(new THREE.SphereGeometry(15, 32, 32), new THREE.MeshBasicMaterial({ color: 0x0000ff })), x: -100, y: 0, z: -100 },
+    { mesh: new THREE.Mesh(new THREE.SphereGeometry(15, 32, 32), new THREE.MeshBasicMaterial({ color: 0x00ff00 })), x: 100, y: 0, z: 100 },
+    { mesh: new THREE.Mesh(new THREE.SphereGeometry(15, 32, 32), new THREE.MeshBasicMaterial({ color: 0xffa500 })), x: -100, y: 0, z: 100 },
+    { mesh: new THREE.Mesh(new THREE.SphereGeometry(15, 32, 32), new THREE.MeshBasicMaterial({ color: 0x800080 })), x: 100, y: 0, z: -100 }
 ];
+planets.forEach(planet => {
+    planet.mesh.position.set(planet.x, planet.y, planet.z);
+    scene.add(planet.mesh);
+});
 
-// Nebulae (slow zones)
+// Nebulae (semi-transparent spheres)
 const nebulae = [
-    { x: 300, y: 200, radius: 50 },
-    { x: 500, y: 400, radius: 70 }
+    { mesh: new THREE.Mesh(new THREE.SphereGeometry(50, 32, 32), new THREE.MeshBasicMaterial({ color: 0x800080, transparent: true, opacity: 0.3 })), x: 0, y: 0, z: 50 },
+    { mesh: new THREE.Mesh(new THREE.SphereGeometry(70, 32, 32), new THREE.MeshBasicMaterial({ color: 0x800080, transparent: true, opacity: 0.3 })), x: 50, y: 0, z: -50 }
 ];
+nebulae.forEach(nebula => {
+    nebula.mesh.position.set(nebula.x, nebula.y, nebula.z);
+    scene.add(nebula.mesh);
+});
 
-// Asteroids (moving obstacles)
+// Asteroids (moving spheres)
 const asteroids = [
-    { x: 200, y: 300, radius: 20, dx: 2, dy: 1 },
-    { x: 600, y: 100, radius: 25, dx: -1.5, dy: 2 }
+    { mesh: new THREE.Mesh(new THREE.SphereGeometry(10, 32, 32), new THREE.MeshBasicMaterial({ color: 0x808080 })), x: -50, y: 0, z: 0, dx: 0.5, dz: 0.3 },
+    { mesh: new THREE.Mesh(new THREE.SphereGeometry(12, 32, 32), new THREE.MeshBasicMaterial({ color: 0x808080 })), x: 50, y: 0, z: -50, dx: -0.4, dz: 0.5 }
 ];
+asteroids.forEach(asteroid => {
+    asteroid.mesh.position.set(asteroid.x, asteroid.y, asteroid.z);
+    scene.add(asteroid.mesh);
+});
 
+// Game variables
 let carryingPackage = false;
 let spacePressed = false;
 let score = 0;
@@ -72,8 +104,8 @@ document.addEventListener("keyup", (e) => {
     if (e.code in keys) keys[e.code] = false;
 });
 
-function distance(x1, y1, x2, y2) {
-    return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+function distance3D(x1, y1, z1, x2, y2, z2) {
+    return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2);
 }
 
 function setNewDelivery() {
@@ -87,22 +119,32 @@ function setNewDelivery() {
 }
 
 function spawnPirate() {
-    const edge = Math.floor(Math.random() * 4);
-    let x, y;
-    if (edge === 0) { // top
-        x = Math.random() * canvas.width;
-        y = -20;
-    } else if (edge === 1) { // right
-        x = canvas.width + 20;
-        y = Math.random() * canvas.height;
-    } else if (edge === 2) { // bottom
-        x = Math.random() * canvas.width;
-        y = canvas.height + 20;
-    } else { // left
-        x = -20;
-        y = Math.random() * canvas.height;
-    }
-    pirates.push({ x, y, speed: 2 });
+    const pirate = new THREE.Mesh(
+        new THREE.ConeGeometry(5, 20, 32),
+        new THREE.MeshBasicMaterial({ color: 0xff0000 })
+    );
+    pirate.rotation.x = Math.PI / 2;
+    const edge = Math.random();
+    if (edge < 0.25) pirate.position.set(-150, 0, Math.random() * 300 - 150);
+    else if (edge < 0.5) pirate.position.set(150, 0, Math.random() * 300 - 150);
+    else if (edge < 0.75) pirate.position.set(Math.random() * 300 - 150, 0, -150);
+    else pirate.position.set(Math.random() * 300 - 150, 0, 150);
+    scene.add(pirate);
+    pirates.push({ mesh: pirate, speed: 0.5 });
+}
+
+function spawnFuelCanister() {
+    const canister = new THREE.Mesh(
+        new THREE.SphereGeometry(5, 32, 32),
+        new THREE.MeshBasicMaterial({ color: 0xffff00 })
+    );
+    canister.position.set(
+        Math.random() * 300 - 150,
+        0,
+        Math.random() * 300 - 150
+    );
+    scene.add(canister);
+    fuelCanisters.push({ mesh: canister });
 }
 
 function loadHighscores() {
@@ -120,19 +162,16 @@ function update() {
     // Fuel canister spawning
     fuelSpawnTimer--;
     if (fuelSpawnTimer <= 0) {
-        fuelCanisters.push({
-            x: Math.random() * canvas.width,
-            y: Math.random() * canvas.height,
-            radius: 10
-        });
+        spawnFuelCanister();
         fuelSpawnTimer = 600;
     }
 
     // Check fuel canister collection
     fuelCanisters = fuelCanisters.filter(canister => {
-        const dist = distance(ship.x, ship.y, canister.x, canister.y);
-        if (dist < canister.radius + 10) {
+        const dist = distance3D(ship.position.x, ship.position.y, ship.position.z, canister.mesh.position.x, canister.mesh.position.y, canister.mesh.position.z);
+        if (dist < 15) {
             ship.fuel = Math.min(ship.maxFuel, ship.fuel + 20);
+            scene.remove(canister.mesh);
             return false;
         }
         return true;
@@ -141,59 +180,51 @@ function update() {
     // Movement with fuel and nebulae
     let speed = ship.speed;
     nebulae.forEach(nebula => {
-        if (distance(ship.x, ship.y, nebula.x, nebula.y) < nebula.radius) {
+        if (distance3D(ship.position.x, ship.position.y, ship.position.z, nebula.mesh.position.x, nebula.mesh.position.y, nebula.mesh.position.z) < 50) {
             speed *= 0.5;
         }
     });
     if (ship.fuel <= 0) speed = 0;
 
-    let isMoving = false;
-    if (keys.ArrowLeft) {
-        ship.x -= speed;
-        isMoving = true;
-    }
-    if (keys.ArrowRight) {
-        ship.x += speed;
-        isMoving = true;
-    }
+    if (keys.ArrowLeft) ship.rotation.y += 0.05;
+    if (keys.ArrowRight) ship.rotation.y -= 0.05;
     if (keys.ArrowUp) {
-        ship.y -= speed;
-        isMoving = true;
+        ship.position.x += Math.sin(ship.rotation.y) * speed;
+        ship.position.z += Math.cos(ship.rotation.y) * speed;
+        if (ship.fuel > 0) ship.fuel -= 0.05;
     }
     if (keys.ArrowDown) {
-        ship.y += speed;
-        isMoving = true;
+        ship.position.x -= Math.sin(ship.rotation.y) * speed;
+        ship.position.z -= Math.cos(ship.rotation.y) * speed;
+        if (ship.fuel > 0) ship.fuel -= 0.05;
     }
-    if (isMoving && ship.fuel > 0) {
-        ship.fuel -= 0.05;
-        ship.fuel = Math.max(0, ship.fuel);
-    }
+    ship.fuel = Math.max(0, ship.fuel);
 
-    // Boundaries
-    ship.x = Math.max(ship.width / 2, Math.min(canvas.width - ship.width / 2, ship.x));
-    ship.y = Math.max(ship.height / 2, Math.min(canvas.height - ship.height / 2, ship.y));
+    // Camera follows ship
+    camera.position.set(ship.position.x, 50, ship.position.z + 100);
+    camera.lookAt(ship.position);
 
     // Asteroid movement and collision
     asteroids.forEach(asteroid => {
-        asteroid.x += asteroid.dx;
-        asteroid.y += asteroid.dy;
-        if (asteroid.x - asteroid.radius < 0 || asteroid.x + asteroid.radius > canvas.width) asteroid.dx = -asteroid.dx;
-        if (asteroid.y - asteroid.radius < 0 || asteroid.y + asteroid.radius > canvas.height) asteroid.dy = -asteroid.dy;
-        if (distance(ship.x, ship.y, asteroid.x, asteroid.y) < asteroid.radius + 10) {
+        asteroid.mesh.position.x += asteroid.dx;
+        asteroid.mesh.position.z += asteroid.dz;
+        if (asteroid.mesh.position.x < -150 || asteroid.mesh.position.x > 150) asteroid.dx = -asteroid.dx;
+        if (asteroid.mesh.position.z < -150 || asteroid.mesh.position.z > 150) asteroid.dz = -asteroid.dz;
+        if (distance3D(ship.position.x, ship.position.y, ship.position.z, asteroid.mesh.position.x, asteroid.mesh.position.y, asteroid.mesh.position.z) < 15) {
             console.log("Collision with asteroid");
         }
     });
 
     // Pirates movement and collision
     pirates.forEach(pirate => {
-        const dx = ship.x - pirate.x;
-        const dy = ship.y - pirate.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const dx = ship.position.x - pirate.mesh.position.x;
+        const dz = ship.position.z - pirate.mesh.position.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
         if (dist > 0) {
-            pirate.x += (dx / dist) * pirate.speed;
-            pirate.y += (dy / dist) * pirate.speed;
+            pirate.mesh.position.x += (dx / dist) * pirate.speed;
+            pirate.mesh.position.z += (dz / dist) * pirate.speed;
         }
-        if (distance(ship.x, ship.y, pirate.x, pirate.y) < 20) {
+        if (distance3D(ship.position.x, ship.position.y, ship.position.z, pirate.mesh.position.x, pirate.mesh.position.y, pirate.mesh.position.z) < 15) {
             console.log("Pirate collision");
         }
     });
@@ -202,20 +233,21 @@ function update() {
     if (keys.Space && !spacePressed) {
         spacePressed = true;
         const planet = planets.find((p, index) => 
-            distance(ship.x, ship.y, p.x, p.y) < p.radius + 20 && 
+            distance3D(ship.position.x, ship.position.y, ship.position.z, p.mesh.position.x, p.mesh.position.y, p.mesh.position.z) < 35 && 
             ((index === currentPickup && !carryingPackage) || (index === currentDelivery && carryingPackage))
         );
         if (planet) {
             if (!carryingPackage) {
                 carryingPackage = true;
-                deliveryTimer = 1800; // 30s at 60fps
+                deliveryTimer = 1800; // 30s
                 pirateSpawnTimer = 1200; // 20s
-                console.log("Picked up package from planet " + currentPickup);
+                shipMaterial.color.setHex(0xffff00); // Yellow when carrying
             } else {
                 carryingPackage = false;
                 score += 100;
-                console.log("Delivered package to planet " + currentDelivery);
+                shipMaterial.color.setHex(0xffffff); // White when empty
                 setNewDelivery();
+                pirates.forEach(p => scene.remove(p.mesh));
                 pirates = [];
             }
         }
@@ -228,7 +260,7 @@ function update() {
         deliveryTimer--;
         if (deliveryTimer <= 0) {
             carryingPackage = false;
-            console.log("Time's up! Package reset.");
+            shipMaterial.color.setHex(0xffffff);
         }
         pirateSpawnTimer--;
         if (pirateSpawnTimer <= 0) {
@@ -237,10 +269,10 @@ function update() {
         }
     }
 
-    // Check for game over (out of fuel and not carrying package)
+    // Check for game over
     if (ship.fuel <= 0 && !carryingPackage) {
         gameState = "gameOver";
-        // Save score if it's a highscore
+        document.getElementById("gameOverScreen").classList.remove("hidden");
         if (highscores.length < 5 || score > highscores[highscores.length - 1].score) {
             const initials = prompt("Enter your initials (3 letters):").slice(0, 3).toUpperCase();
             highscores.push({ initials, score });
@@ -248,179 +280,58 @@ function update() {
             if (highscores.length > 5) highscores.pop();
             saveHighscores();
         }
+        updateHighscoreDisplay();
     }
+
+    // Update UI
+    document.getElementById("fuelBar").style.width = `${(ship.fuel / ship.maxFuel) * 100}%`;
+    if (carryingPackage) {
+        document.getElementById("timeLeft").classList.remove("hidden");
+        document.getElementById("timeLeft").textContent = `Time Left: ${Math.ceil(deliveryTimer / 60)}s`;
+    } else {
+        document.getElementById("timeLeft").classList.add("hidden");
+    }
+    document.getElementById("score").textContent = `Score: ${score}`;
 }
 
-function drawBackground() {
-    ctx.fillStyle = "black";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "white";
-    stars.forEach(star => ctx.fillRect(star.x, star.y, 1, 1));
-}
-
-function drawNebulae() {
-    nebulae.forEach(nebula => {
-        ctx.beginPath();
-        ctx.arc(nebula.x, nebula.y, nebula.radius, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(128, 0, 128, 0.3)";
-        ctx.fill();
-    });
-}
-
-function drawAsteroids() {
-    asteroids.forEach(asteroid => {
-        ctx.beginPath();
-        ctx.arc(asteroid.x, asteroid.y, asteroid.radius, 0, Math.PI * 2);
-        ctx.fillStyle = "gray";
-        ctx.fill();
-    });
-}
-
-function drawFuelCanisters() {
-    fuelCanisters.forEach(canister => {
-        ctx.beginPath();
-        ctx.arc(canister.x, canister.y, canister.radius, 0, Math.PI * 2);
-        ctx.fillStyle = "yellow";
-        ctx.fill();
-    });
-}
-
-function drawPirates() {
-    pirates.forEach(pirate => {
-        ctx.save();
-        ctx.translate(pirate.x, pirate.y);
-        ctx.beginPath();
-        ctx.moveTo(0, -10);
-        ctx.lineTo(5, 5);
-        ctx.lineTo(-5, 5);
-        ctx.closePath();
-        ctx.fillStyle = "red";
-        ctx.fill();
-        ctx.restore();
-    });
-}
-
-function drawPlanets() {
-    planets.forEach((planet, index) => {
-        ctx.beginPath();
-        ctx.arc(planet.x, planet.y, planet.radius, 0, Math.PI * 2);
-        ctx.fillStyle = planet.color;
-        ctx.fill();
-        if (index === currentPickup && !carryingPackage) {
-            ctx.fillStyle = "white";
-            ctx.font = "16px Arial";
-            ctx.fillText("Pickup", planet.x - 20, planet.y - planet.radius - 10);
-        } else if (index === currentDelivery && carryingPackage) {
-            ctx.fillText("Deliver", planet.x - 20, planet.y - planet.radius - 10);
-        }
-    });
-}
-
-function drawShip() {
-    ctx.save();
-    ctx.translate(ship.x, ship.y);
-    ctx.beginPath();
-    ctx.moveTo(0, -ship.height / 2);
-    ctx.lineTo(ship.width / 2, ship.height / 2);
-    ctx.lineTo(-ship.width / 2, ship.height / 2);
-    ctx.closePath();
-    ctx.fillStyle = carryingPackage ? "yellow" : "white";
-    ctx.fill();
-    ctx.restore();
-}
-
-function drawFuelBar() {
-    const barWidth = 200;
-    const barHeight = 20;
-    const x = 10;
-    const y = 30; // Positioned to avoid cropping
-    ctx.fillStyle = "gray";
-    ctx.fillRect(x, y, barWidth, barHeight);
-    const fuelFraction = ship.fuel / ship.maxFuel;
-    ctx.fillStyle = "green";
-    ctx.fillRect(x, y, barWidth * fuelFraction, barHeight);
-    ctx.fillStyle = "white";
-    ctx.font = "16px Arial";
-    ctx.fillText("Fuel", x, y - 5);
-}
-
-function drawTitleScreen() {
-    ctx.fillStyle = "white";
-    ctx.font = "48px Arial";
-    ctx.fillText("Cosmic Courier", 250, 200);
-    ctx.font = "24px Arial";
-    ctx.fillText("Click to Start", 320, 300);
-    ctx.font = "18px Arial";
-    ctx.fillText("Use arrow keys to move.", 280, 400);
-    ctx.fillText("Press spacebar to pick up or deliver packages.", 200, 430);
-    ctx.fillText("Avoid obstacles and manage fuel!", 250, 460);
-}
-
-function drawGameOverScreen() {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "white";
-    ctx.font = "48px Arial";
-    ctx.fillText("Game Over", 300, 200);
-    ctx.font = "24px Arial";
-    ctx.fillText("Click to Restart", 320, 250);
-    ctx.font = "18px Arial";
-    ctx.fillText("Highscores:", 350, 350);
+function updateHighscoreDisplay() {
+    const highscoreDiv = document.getElementById("highscores");
+    highscoreDiv.innerHTML = "<p>Highscores:</p>";
     highscores.forEach((entry, index) => {
-        ctx.fillText(`${index + 1}. ${entry.initials} - ${entry.score}`, 350, 380 + index * 30);
+        highscoreDiv.innerHTML += `<p>${index + 1}. ${entry.initials} - ${entry.score}</p>`;
     });
 }
 
-function draw() {
-    drawBackground();
-    if (gameState === "title") {
-        drawTitleScreen();
-    } else if (gameState === "playing") {
-        drawNebulae();
-        drawAsteroids();
-        drawFuelCanisters();
-        drawPirates();
-        drawPlanets();
-        drawShip();
-        drawFuelBar();
-        if (carryingPackage) {
-            const timeLeft = Math.ceil(deliveryTimer / 60);
-            ctx.fillStyle = "white";
-            ctx.font = "20px Arial";
-            ctx.fillText(`Time Left: ${timeLeft}s`, 10, 60); // Moved to y = 60
-        }
-        ctx.fillText(`Score: ${score}`, 10, 90); // Moved to y = 90
-    } else if (gameState === "gameOver") {
-        drawGameOverScreen();
-    }
-}
-
-function gameLoop() {
+function animate() {
     if (gameState === "playing") {
         update();
     }
-    draw();
-    requestAnimationFrame(gameLoop);
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
 }
 
 // Start or restart game on click
-canvas.addEventListener("click", () => {
+document.addEventListener("click", () => {
     if (gameState === "title") {
         gameState = "playing";
+        document.getElementById("titleScreen").classList.add("hidden");
         setNewDelivery();
     } else if (gameState === "gameOver") {
         // Reset game variables
-        ship.x = canvas.width / 2;
-        ship.y = canvas.height / 2;
+        ship.position.set(0, 0, 0);
         ship.fuel = 100;
         carryingPackage = false;
         score = 0;
+        pirates.forEach(p => scene.remove(p.mesh));
         pirates = [];
+        fuelCanisters.forEach(f => scene.remove(f.mesh));
         fuelCanisters = [];
         fuelSpawnTimer = 600;
+        shipMaterial.color.setHex(0xffffff);
         setNewDelivery();
         gameState = "playing";
+        document.getElementById("gameOverScreen").classList.add("hidden");
     }
 });
 
-gameLoop();
+animate();
