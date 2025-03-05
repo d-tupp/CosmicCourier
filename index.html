@@ -25,6 +25,22 @@
             padding: 10px;
             border-radius: 5px;
         }
+        #leaderboard {
+            position: absolute;
+            top: 60px;
+            left: 10px;
+            color: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .avatar {
+            width: 10px;
+            height: 10px;
+            display: inline-block;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
         #reset {
             position: absolute;
             bottom: 10px;
@@ -39,10 +55,10 @@
 <body>
     <div id="ui">Score: 0</div>
     <div id="players">Players: </div>
+    <div id="leaderboard">Leaderboard:<br>Loading...</div>
     <button id="reset">Reset Game</button>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
     <script src="https://unpkg.com/three@0.134.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/noisejs/2.1.0/noise.min.js"></script>
     <script src="game.js"></script>
 </body>
 </html>
