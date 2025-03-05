@@ -16,13 +16,17 @@ const ship = {
     y: canvas.height / 2,
     width: 20,
     height: 30,
-    speed: 5
+    speed: 5,
+    fuel: 100,
+    maxFuel: 100
 };
 
 // Planets
 const planets = [
-    { x: 100, y: 100, radius: 30, color: "blue", type: "pickup" },
-    { x: 700, y: 500, radius: 30, color: "green", type: "delivery" }
+    { x: 100, y: 100, radius: 30, color: "blue" },
+    { x: 700, y: 500, radius: 30, color: "green" },
+    { x: 200, y: 500, radius: 30, color: "orange" },
+    { x: 600, y: 100, radius: 30, color: "purple" }
 ];
 
 // Nebulae (slow zones)
@@ -39,6 +43,14 @@ const asteroids = [
 
 let carryingPackage = false;
 let spacePressed = false;
+let score = 0;
+let currentPickup = 0;
+let currentDelivery = 1;
+let deliveryTimer = 0;
+let pirateSpawnTimer = 0;
+let pirates = [];
+let fuelCanisters = [];
+let fuelSpawnTimer = 600;
 
 const keys = {
     ArrowLeft: false,
@@ -60,63 +72,154 @@ function distance(x1, y1, x2, y2) {
     return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
 }
 
+function setNewDelivery() {
+    let pickupIndex, deliveryIndex;
+    do {
+        pickupIndex = Math.floor(Math.random() * planets.length);
+        deliveryIndex = Math.floor(Math.random() * planets.length);
+    } while (pickupIndex === deliveryIndex);
+    currentPickup = pickupIndex;
+    currentDelivery = deliveryIndex;
+}
+
+function spawnPirate() {
+    const edge = Math.floor(Math.random() * 4);
+    let x, y;
+    if (edge === 0) { // top
+        x = Math.random() * canvas.width;
+        y = -20;
+    } else if (edge === 1) { // right
+        x = canvas.width + 20;
+        y = Math.random() * canvas.height;
+    } else if (edge === 2) { // bottom
+        x = Math.random() * canvas.width;
+        y = canvas.height + 20;
+    } else { // left
+        x = -20;
+        y = Math.random() * canvas.height;
+    }
+    pirates.push({ x, y, speed: 2 });
+}
+
 function update() {
-    let speed = ship.speed;
-    nebulae.forEach(nebula => {
-        const dist = distance(ship.x, ship.y, nebula.x, nebula.y);
-        if (dist < nebula.radius) {
-            speed *= 0.5; // Slow down in nebula
+    // Fuel canister spawning
+    fuelSpawnTimer--;
+    if (fuelSpawnTimer <= 0) {
+        fuelCanisters.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            radius: 10
+        });
+        fuelSpawnTimer = 600;
+    }
+
+    // Check fuel canister collection
+    fuelCanisters = fuelCanisters.filter(canister => {
+        const dist = distance(ship.x, ship.y, canister.x, canister.y);
+        if (dist < canister.radius + 10) {
+            ship.fuel = Math.min(ship.maxFuel, ship.fuel + 20);
+            return false;
         }
+        return true;
     });
 
-    if (keys.ArrowLeft) ship.x -= speed;
-    if (keys.ArrowRight) ship.x += speed;
-    if (keys.ArrowUp) ship.y -= speed;
-    if (keys.ArrowDown) ship.y += speed;
+    // Movement with fuel and nebulae
+    let speed = ship.speed;
+    nebulae.forEach(nebula => {
+        if (distance(ship.x, ship.y, nebula.x, nebula.y) < nebula.radius) {
+            speed *= 0.5;
+        }
+    });
+    if (ship.fuel <= 0) speed = 0;
+
+    let isMoving = false;
+    if (keys.ArrowLeft) {
+        ship.x -= speed;
+        isMoving = true;
+    }
+    if (keys.ArrowRight) {
+        ship.x += speed;
+        isMoving = true;
+    }
+    if (keys.ArrowUp) {
+        ship.y -= speed;
+        isMoving = true;
+    }
+    if (keys.ArrowDown) {
+        ship.y += speed;
+        isMoving = true;
+    }
+    if (isMoving && ship.fuel > 0) {
+        ship.fuel -= 0.05;
+        ship.fuel = Math.max(0, ship.fuel);
+    }
 
     // Boundaries
-    if (ship.x < ship.width / 2) ship.x = ship.width / 2;
-    if (ship.x > canvas.width - ship.width / 2) ship.x = canvas.width - ship.width / 2;
-    if (ship.y < ship.height / 2) ship.y = ship.height / 2;
-    if (ship.y > canvas.height - ship.height / 2) ship.y = canvas.height - ship.height / 2;
+    ship.x = Math.max(ship.width / 2, Math.min(canvas.width - ship.width / 2, ship.x));
+    ship.y = Math.max(ship.height / 2, Math.min(canvas.height - ship.height / 2, ship.y));
 
     // Asteroid movement and collision
     asteroids.forEach(asteroid => {
         asteroid.x += asteroid.dx;
         asteroid.y += asteroid.dy;
-
-        if (asteroid.x - asteroid.radius < 0 || asteroid.x + asteroid.radius > canvas.width) {
-            asteroid.dx = -asteroid.dx;
-        }
-        if (asteroid.y - asteroid.radius < 0 || asteroid.y + asteroid.radius > canvas.height) {
-            asteroid.dy = -asteroid.dy;
-        }
-
-        const dist = distance(ship.x, ship.y, asteroid.x, asteroid.y);
-        if (dist < asteroid.radius + 10) { // Assuming ship radius ~10
+        if (asteroid.x - asteroid.radius < 0 || asteroid.x + asteroid.radius > canvas.width) asteroid.dx = -asteroid.dx;
+        if (asteroid.y - asteroid.radius < 0 || asteroid.y + asteroid.radius > canvas.height) asteroid.dy = -asteroid.dy;
+        if (distance(ship.x, ship.y, asteroid.x, asteroid.y) < asteroid.radius + 10) {
             console.log("Collision with asteroid");
-            // Future: Add damage or reset logic
+        }
+    });
+
+    // Pirates movement and collision
+    pirates.forEach(pirate => {
+        const dx = ship.x - pirate.x;
+        const dy = ship.y - pirate.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 0) {
+            pirate.x += (dx / dist) * pirate.speed;
+            pirate.y += (dy / dist) * pirate.speed;
+        }
+        if (distance(ship.x, ship.y, pirate.x, pirate.y) < 20) {
+            console.log("Pirate collision");
         }
     });
 
     // Package interaction
     if (keys.Space && !spacePressed) {
         spacePressed = true;
-        planets.forEach(planet => {
-            const dist = distance(ship.x, ship.y, planet.x, planet.y);
-            if (dist < planet.radius + 20) {
-                if (planet.type === "pickup" && !carryingPackage) {
-                    carryingPackage = true;
-                    console.log("Picked up package");
-                } else if (planet.type === "delivery" && carryingPackage) {
-                    carryingPackage = false;
-                    console.log("Delivered package");
-                    // Future: Add score or progress
-                }
+        const planet = planets.find((p, index) => 
+            distance(ship.x, ship.y, p.x, p.y) < p.radius + 20 && 
+            ((index === currentPickup && !carryingPackage) || (index === currentDelivery && carryingPackage))
+        );
+        if (planet) {
+            if (!carryingPackage) {
+                carryingPackage = true;
+                deliveryTimer = 1800; // 30s at 60fps
+                pirateSpawnTimer = 1200; // 20s
+                console.log("Picked up package from planet " + currentPickup);
+            } else {
+                carryingPackage = false;
+                score += 100;
+                console.log("Delivered package to planet " + currentDelivery);
+                setNewDelivery();
+                pirates = [];
             }
-        });
+        }
     } else if (!keys.Space) {
         spacePressed = false;
+    }
+
+    // Timer and pirate spawning
+    if (carryingPackage) {
+        deliveryTimer--;
+        if (deliveryTimer <= 0) {
+            carryingPackage = false;
+            console.log("Time's up! Package reset.");
+        }
+        pirateSpawnTimer--;
+        if (pirateSpawnTimer <= 0) {
+            spawnPirate();
+            pirateSpawnTimer = 600; // every 10s
+        }
     }
 }
 
@@ -124,16 +227,14 @@ function drawBackground() {
     ctx.fillStyle = "black";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "white";
-    stars.forEach(star => {
-        ctx.fillRect(star.x, star.y, 1, 1);
-    });
+    stars.forEach(star => ctx.fillRect(star.x, star.y, 1, 1));
 }
 
 function drawNebulae() {
     nebulae.forEach(nebula => {
         ctx.beginPath();
         ctx.arc(nebula.x, nebula.y, nebula.radius, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(128, 0, 128, 0.3)"; // Purple nebula
+        ctx.fillStyle = "rgba(128, 0, 128, 0.3)";
         ctx.fill();
     });
 }
@@ -147,12 +248,43 @@ function drawAsteroids() {
     });
 }
 
+function drawFuelCanisters() {
+    fuelCanisters.forEach(canister => {
+        ctx.beginPath();
+        ctx.arc(canister.x, canister.y, canister.radius, 0, Math.PI * 2);
+        ctx.fillStyle = "yellow";
+        ctx.fill();
+    });
+}
+
+function drawPirates() {
+    pirates.forEach(pirate => {
+        ctx.save();
+        ctx.translate(pirate.x, pirate.y);
+        ctx.beginPath();
+        ctx.moveTo(0, -10);
+        ctx.lineTo(5, 5);
+        ctx.lineTo(-5, 5);
+        ctx.closePath();
+        ctx.fillStyle = "red";
+        ctx.fill();
+        ctx.restore();
+    });
+}
+
 function drawPlanets() {
-    planets.forEach(planet => {
+    planets.forEach((planet, index) => {
         ctx.beginPath();
         ctx.arc(planet.x, planet.y, planet.radius, 0, Math.PI * 2);
         ctx.fillStyle = planet.color;
         ctx.fill();
+        if (index === currentPickup && !carryingPackage) {
+            ctx.fillStyle = "white";
+            ctx.font = "16px Arial";
+            ctx.fillText("Pickup", planet.x - 20, planet.y - planet.radius - 10);
+        } else if (index === currentDelivery && carryingPackage) {
+            ctx.fillText("Deliver", planet.x - 20, planet.y - planet.radius - 10);
+        }
     });
 }
 
@@ -169,12 +301,37 @@ function drawShip() {
     ctx.restore();
 }
 
+function drawFuelBar() {
+    const barWidth = 200;
+    const barHeight = 20;
+    const x = 10;
+    const y = 10;
+    ctx.fillStyle = "gray";
+    ctx.fillRect(x, y, barWidth, barHeight);
+    const fuelFraction = ship.fuel / ship.maxFuel;
+    ctx.fillStyle = "green";
+    ctx.fillRect(x, y, barWidth * fuelFraction, barHeight);
+    ctx.fillStyle = "white";
+    ctx.font = "16px Arial";
+    ctx.fillText("Fuel", x, y - 5);
+}
+
 function draw() {
     drawBackground();
     drawNebulae();
     drawAsteroids();
+    drawFuelCanisters();
+    drawPirates();
     drawPlanets();
     drawShip();
+    drawFuelBar();
+    if (carryingPackage) {
+        const timeLeft = Math.ceil(deliveryTimer / 60);
+        ctx.fillStyle = "white";
+        ctx.font = "20px Arial";
+        ctx.fillText(`Time Left: ${timeLeft}s`, 10, 40);
+    }
+    ctx.fillText(`Score: ${score}`, 10, 70);
 }
 
 function gameLoop() {
@@ -183,4 +340,5 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
+setNewDelivery();
 gameLoop();
