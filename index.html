@@ -3,24 +3,91 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cosmic Courier</title>
+    <title>Cosmic Courier 3D</title>
     <style>
         body {
-            background-color: #111;
+            margin: 0;
+            overflow: hidden;
+            background: #111;
+        }
+        #gameCanvas {
+            width: 100%;
+            height: 100vh;
+        }
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            color: white;
+            font-family: Arial, sans-serif;
+            padding: 10px;
+        }
+        #fuelBarContainer {
+            width: 200px;
+            height: 20px;
+            background: gray;
+            margin-top: 5px;
+        }
+        #fuelBar {
+            height: 100%;
+            background: green;
+            width: 100%;
+            transition: width 0.2s;
+        }
+        #timeLeft, #score {
+            margin-top: 10px;
+            font-size: 20px;
+        }
+        #titleScreen, #gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
-            height: 100vh;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        #titleScreen h1, #gameOverScreen h1 {
+            font-size: 48px;
             margin: 0;
         }
-        canvas {
-            border: 1px solid white;
-            background: black;
+        #titleScreen p, #gameOverScreen p {
+            font-size: 24px;
+            margin: 10px 0;
+        }
+        .hidden {
+            display: none;
         }
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="gameCanvas"></div>
+    <div id="ui">
+        <div>Fuel</div>
+        <div id="fuelBarContainer">
+            <div id="fuelBar"></div>
+        </div>
+        <div id="timeLeft" class="hidden">Time Left: 30s</div>
+        <div id="score">Score: 0</div>
+    </div>
+    <div id="titleScreen">
+        <h1>Cosmic Courier 3D</h1>
+        <p>Click to Start</p>
+        <p>Use arrow keys to move (Up/Down for forward/back, Left/Right to turn).</p>
+        <p>Spacebar to pick up/deliver packages. Manage fuel and avoid obstacles!</p>
+    </div>
+    <div id="gameOverScreen" class="hidden">
+        <h1>Game Over</h1>
+        <p>Click to Restart</p>
+        <div id="highscores"></div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="game.js"></script>
 </body>
 </html>
