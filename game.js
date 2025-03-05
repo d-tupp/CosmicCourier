@@ -10,14 +10,15 @@ const light = new THREE.DirectionalLight(0xffffff, 1);
 light.position.set(5, 10, 5).normalize();
 scene.add(light);
 
-// Complex Terrain Generation (Perlin-like Noise)
+// Terrain with Perlin Noise
+noise.seed(Math.random());
 function generateTerrain() {
     const geometry = new THREE.PlaneGeometry(100, 200, 64, 64);
     const vertices = geometry.attributes.position.array;
     for (let i = 0; i < vertices.length; i += 3) {
         const x = vertices[i];
         const y = vertices[i + 1];
-        vertices[i + 2] = Math.sin(x * 0.1) * 5 + Math.cos(y * 0.1) * 5 + Math.random() * 2; // Hilly with randomness
+        vertices[i + 2] = noise.perlin2(x * 0.05, y * 0.05) * 10 + noise.perlin2(x * 0.1, y * 0.1) * 5; // Layered noise
     }
     geometry.computeVertexNormals();
     const material = new THREE.MeshPhongMaterial({ color: 0xffffff, side: THREE.DoubleSide });
@@ -33,6 +34,25 @@ const goalMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
 const goal = new THREE.Mesh(goalGeometry, goalMaterial);
 goal.position.set(0, 2.5, -100);
 scene.add(goal);
+
+// Particle System
+function createParticles(position, color) {
+    const geometry = new THREE.BufferGeometry();
+    const vertices = [];
+    for (let i = 0; i < 50; i++) {
+        vertices.push(
+            Math.random() * 2 - 1,
+            Math.random() * 2 - 1,
+            Math.random() * 2 - 1
+        );
+    }
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    const material = new THREE.PointsMaterial({ color, size: 0.2 });
+    const particles = new THREE.Points(geometry, material);
+    particles.position.copy(position);
+    scene.add(particles);
+    setTimeout(() => scene.remove(particles), 1000); // Remove after 1s
+}
 
 // Load 3D Models from GitHub
 const loader = new THREE.GLTFLoader();
@@ -54,14 +74,17 @@ loader.load('https://raw.githubusercontent.com/your-username/your-repo/main/puck
 camera.position.set(0, 10, 15);
 camera.lookAt(new THREE.Vector3(0, 0, 0));
 
-// Multiplayer WebSocket with Optimization
+// Multiplayer WebSocket
 const socket = new WebSocket('ws://localhost:8080');
 let players = {};
 let lastUpdateTime = 0;
-const updateInterval = 100; // Update every 100ms
+const updateInterval = 100;
 socket.onmessage = (event) => {
     const data = JSON.parse(event.data);
-    if (data.type === 'update') players[data.id] = data;
+    if (data.type === 'update') {
+        players[data.id] = data;
+        updatePlayerHUD();
+    }
 };
 
 // Sound Effects
@@ -80,6 +103,25 @@ let keys = {};
 let isTricking = false;
 let score = 0;
 const ui = document.getElementById('ui');
+const playerHUD = document.getElementById('players');
+
+// HUD for Multiplayer Names
+function updatePlayerHUD() {
+    const playerList = Object.keys(players).map(id => `Player ${id.slice(-4)}`).join(', ');
+    playerHUD.textContent = `Players: ${playerList || 'None'}`;
+}
+
+// Reset Button
+document.getElementById('reset').addEventListener('click', () => {
+    score = 0;
+    ui.textContent = `Score: ${score}`;
+    boarder.position.set(0, 1, 0);
+    puck.position.set(0, 0.5, 5);
+    puckSpeed.x = 0;
+    puckSpeed.z = 0;
+    isTricking = false;
+    boarder.rotation.set(0, 0, 0);
+});
 
 // Key Controls
 document.addEventListener('keydown', (event) => {
@@ -90,7 +132,7 @@ document.addEventListener('keyup', (event) => keys[event.code] = false);
 
 // Physics and Logic
 function updatePhysics() {
-    if (!boarder || !puck) return; // Wait for models to load
+    if (!boarder || !puck) return;
 
     // Snowboarder Movement
     if (keys['ArrowLeft']) boarder.position.x -= speed;
@@ -109,8 +151,9 @@ function updatePhysics() {
         if (boarder.rotation.x > Math.PI * 2) {
             boarder.rotation.x = 0;
             isTricking = false;
-            score += 10; // Bonus for tricks
+            score += 10;
             ui.textContent = `Score: ${score}`;
+            createParticles(boarder.position, 0xffff00); // Yellow particles for tricks
         }
     }
 
@@ -122,9 +165,10 @@ function updatePhysics() {
 
     // Puck Collision with Goal
     if (puck.position.z < -98 && puck.position.z > -102 && puck.position.x > -5 && puck.position.x < 5) {
-        score += 50; // Goal points
+        score += 50;
         ui.textContent = `Score: ${score}`;
         goalSound.play();
+        createParticles(puck.position, 0x00ff00); // Green particles for goals
         puck.position.set(0, 0.5, 5);
         puckSpeed.x = 0;
         puckSpeed.z = 0;
