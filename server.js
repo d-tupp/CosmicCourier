@@ -11,7 +11,6 @@ wss.on('connection', (ws) => {
         const data = JSON.parse(message);
         if (data.type === 'update') {
             players[ws.id] = data;
-            // Broadcast to all clients with throttling
             wss.clients.forEach((client) => {
                 if (client.readyState === WebSocket.OPEN) {
                     client.send(JSON.stringify({ type: 'update', id: ws.id, ...data }));
