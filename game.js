@@ -87,6 +87,8 @@ let pirates = [];
 let fuelCanisters = [];
 let fuelSpawnTimer = 600;
 let highscores = loadHighscores();
+ship.fuel = 100;
+ship.maxFuel = 100;
 
 const keys = {
     ArrowLeft: false,
@@ -310,13 +312,18 @@ function animate() {
     requestAnimationFrame(animate);
 }
 
-// Start or restart game on click
-document.addEventListener("click", () => {
+// Start game on title screen click
+document.getElementById("titleScreen").addEventListener("click", () => {
     if (gameState === "title") {
         gameState = "playing";
         document.getElementById("titleScreen").classList.add("hidden");
         setNewDelivery();
-    } else if (gameState === "gameOver") {
+    }
+});
+
+// Restart game on game over screen click
+document.getElementById("gameOverScreen").addEventListener("click", () => {
+    if (gameState === "gameOver") {
         // Reset game variables
         ship.position.set(0, 0, 0);
         ship.fuel = 100;
