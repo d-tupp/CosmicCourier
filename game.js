@@ -1,6 +1,9 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
+// Game states
+let gameState = "title"; // "title", "playing", "gameOver"
+
 // Background stars
 const stars = [];
 for (let i = 0; i < 100; i++) {
@@ -102,6 +105,8 @@ function spawnPirate() {
 }
 
 function update() {
+    if (gameState !== "playing") return;
+
     // Fuel canister spawning
     fuelSpawnTimer--;
     if (fuelSpawnTimer <= 0) {
@@ -316,29 +321,54 @@ function drawFuelBar() {
     ctx.fillText("Fuel", x, y - 5);
 }
 
+function drawTitleScreen() {
+    ctx.fillStyle = "white";
+    ctx.font = "48px Arial";
+    ctx.fillText("Cosmic Courier", 250, 200);
+    ctx.font = "24px Arial";
+    ctx.fillText("Click to Start", 320, 300);
+    ctx.font = "18px Arial";
+    ctx.fillText("Use arrow keys to move.", 280, 400);
+    ctx.fillText("Press spacebar to pick up or deliver packages.", 200, 430);
+    ctx.fillText("Avoid obstacles and manage fuel!", 250, 460);
+}
+
 function draw() {
     drawBackground();
-    drawNebulae();
-    drawAsteroids();
-    drawFuelCanisters();
-    drawPirates();
-    drawPlanets();
-    drawShip();
-    drawFuelBar();
-    if (carryingPackage) {
-        const timeLeft = Math.ceil(deliveryTimer / 60);
-        ctx.fillStyle = "white";
-        ctx.font = "20px Arial";
-        ctx.fillText(`Time Left: ${timeLeft}s`, 10, 40);
+    if (gameState === "title") {
+        drawTitleScreen();
+    } else if (gameState === "playing") {
+        drawNebulae();
+        drawAsteroids();
+        drawFuelCanisters();
+        drawPirates();
+        drawPlanets();
+        drawShip();
+        drawFuelBar();
+        if (carryingPackage) {
+            const timeLeft = Math.ceil(deliveryTimer / 60);
+            ctx.fillStyle = "white";
+            ctx.font = "20px Arial";
+            ctx.fillText(`Time Left: ${timeLeft}s`, 10, 40);
+        }
+        ctx.fillText(`Score: ${score}`, 10, 70);
     }
-    ctx.fillText(`Score: ${score}`, 10, 70);
 }
 
 function gameLoop() {
-    update();
+    if (gameState === "playing") {
+        update();
+    }
     draw();
     requestAnimationFrame(gameLoop);
 }
 
-setNewDelivery();
+// Start game on click
+canvas.addEventListener("click", () => {
+    if (gameState === "title") {
+        gameState = "playing";
+        setNewDelivery();
+    }
+});
+
 gameLoop();
